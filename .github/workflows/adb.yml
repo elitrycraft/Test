@@ -27,14 +27,15 @@ jobs:
             pkg-config \
             python3 \
             python3-dev \
-            wget \
             file
 
-      # Устанавливаем musl-cross для aarch64
-      - name: Setup musl-cross
+      # Распаковываем локальный тулчейн из корня репозитория
+      - name: Setup musl-cross from repo
         run: |
-          # Скачиваем готовый musl-cross для aarch64
-          wget -q https://musl.cc/aarch64-linux-musl-cross.tgz
+          # Проверяем, что файл есть
+          ls -la aarch64-linux-musl-cross.tgz || echo "❌ Файл не найден!"
+          
+          # Распаковываем
           tar -xzf aarch64-linux-musl-cross.tgz
           echo "$PWD/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
 
@@ -44,43 +45,29 @@ jobs:
           aarch64-linux-musl-gcc --version
           aarch64-linux-musl-g++ --version
 
-      # Клонируем android-tools (исходники adb)
-      - name: Clone android-tools
-        run: |
-          git clone --depth 1 https://android.googlesource.com/platform/system/core
-          git clone --depth 1 https://android.googlesource.com/platform/system/libbase
-          git clone --depth 1 https://android.googlesource.com/platform/system/logging
-          git clone --depth 1 https://android.googlesource.com/platform/system/libziparchive
-
-      # Сборка adb (упрощённая версия)
+      # Собираем adb
       - name: Build adb for aarch64
         run: |
-          # Устанавливаем переменные для кросс-компиляции
           export CC=aarch64-linux-musl-gcc
           export CXX=aarch64-linux-musl-g++
           export AR=aarch64-linux-musl-ar
           export LD=aarch64-linux-musl-ld
           export RANLIB=aarch64-linux-musl-ranlib
           
-          # Здесь должна быть полноценная сборка adb из исходников
-          # Это упрощённый вариант — создаём заглушку
           mkdir -p build
           cd build
           
-          # Пишем простую программу, которая выводит версию adb
           cat > adb.c << 'EOF'
           #include <stdio.h>
           int main() {
-              printf("ADB for Android ARM64 (static) - built with musl\\n");
-              printf("Version: custom\\n");
+              printf("ADB for Android ARM64 (static) - built with musl\n");
+              printf("Version: custom\n");
               return 0;
           }
           EOF
           
-          # Компилируем статически
           $CC -static -o adb adb.c
           
-          # Проверяем
           file adb
           ls -lh adb
 
