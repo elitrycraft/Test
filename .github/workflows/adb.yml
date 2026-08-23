@@ -23,13 +23,13 @@ jobs:
       - name: Verify cross-compiler
         run: aarch64-linux-musl-gcc --version
 
-      - name: Clone ADB and all dependencies
+      - name: Clone ADB and dependencies
         run: |
           git clone --depth 1 https://android.googlesource.com/platform/packages/modules/adb
           git clone --depth 1 https://android.googlesource.com/platform/system/libbase
           git clone --depth 1 https://android.googlesource.com/platform/system/logging
           git clone --depth 1 https://android.googlesource.com/platform/system/libziparchive
-          git clone --depth 1 https://android.googlesource.com/platform/system/libcutils
+          git clone --depth 1 https://android.googlesource.com/platform/system/core/libcutils
 
       - name: Build ADB
         run: |
@@ -39,16 +39,15 @@ jobs:
           export LD=aarch64-linux-musl-ld
           export RANLIB=aarch64-linux-musl-ranlib
           
-          # Сначала собираем libcutils и liblog
+          # Собираем libcutils
           cd libcutils
           make CC=$CC CXX=$CXX AR=$AR LD=$LD RANLIB=$RANLIB \
                CFLAGS="-static -Os -I.. -I../libbase/include" \
                libcutils.a
           cd ..
           
-          # Теперь собираем ADB
+          # Собираем ADB
           cd adb
-          
           cat > Makefile << 'EOF'
           CC = aarch64-linux-musl-gcc
           CXX = aarch64-linux-musl-g++
