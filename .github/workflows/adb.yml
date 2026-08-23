@@ -27,13 +27,17 @@ jobs:
             pkg-config \
             python3 \
             python3-dev \
-            file
+            file \
+            wget
 
-      # Распаковываем локальный тулчейн из корня репозитория
-      - name: Setup musl-cross from repo
+      # Скачиваем тулчейн из релиза
+      - name: Download musl-cross from release
         run: |
-          # Проверяем, что файл есть
-          ls -la aarch64-linux-musl-cross.tgz || echo "❌ Файл не найден!"
+          # Скачиваем файл из вашего релиза
+          wget https://github.com/elitrycraft/Test/releases/download/11/aarch64-linux-musl-cross.tgz
+          
+          # Проверяем, что скачалось
+          ls -la aarch64-linux-musl-cross.tgz
           
           # Распаковываем
           tar -xzf aarch64-linux-musl-cross.tgz
