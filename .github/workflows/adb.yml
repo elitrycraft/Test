@@ -12,10 +12,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             git make gcc g++ autoconf automake libtool \
-            pkg-config python3 python3-dev file wget \
-            patch
+            pkg-config python3 python3-dev file wget
 
-      - name: Download musl-cross from release
+      - name: Download musl-cross
         run: |
           wget https://github.com/elitrycraft/Test/releases/download/11/aarch64-linux-musl-cross.tgz
           tar -xzf aarch64-linux-musl-cross.tgz
@@ -24,7 +23,7 @@ jobs:
       - name: Verify cross-compiler
         run: aarch64-linux-musl-gcc --version
 
-      - name: Build ADB from AOSP (old branch)
+      - name: Build ADB
         run: |
           export CC=aarch64-linux-musl-gcc
           export CXX=aarch64-linux-musl-g++
@@ -34,45 +33,32 @@ jobs:
           
           echo -e "\n>> >>> ADB for ARM (musl) <<< \n"
           
+          # Создаём структуру
           mkdir -p android-adb/system
           cd android-adb/system || exit 1
           
-          # Используем СТАРУЮ ветку, где libcutils внутри core
-          git clone --depth 1 --branch android-4.4.4_r2.0.1 https://android.googlesource.com/platform/system/core
-          
+          # Клонируем core (там adb)
+          git clone --depth 1 https://android.googlesource.com/platform/system/core
           cd core || exit 1
-          # Патч для usb_linux.c (как в оригинале)
-          cat > core.patch << 'EOF'
-          --- a/adb/usb_linux.c
-          +++ b/adb/usb_linux.c
-          @@ -1,6 +1,7 @@
-           #include <stdio.h>
-           #include <stdlib.h>
-           #include <string.h>
-          +#include <sys/sysmacros.h>
-           #include <unistd.h>
-           #include <errno.h>
-           #include <fcntl.h>
-          EOF
-          patch -p1 < core.patch || echo "Patch applied or already present"
-          cd ..
           
-          # Клонируем extras (нужен для libcutils)
-          git clone --depth 1 --branch android-4.4.4_r2.0.1 https://android.googlesource.com/platform/system/extras
+          # Клонируем libcutils (он внутри core)
+          cd ..
+          git clone --depth 1 https://android.googlesource.com/platform/system/libcutils
           
           cd ..
           mkdir -p external
           cd external || exit 1
-          git clone --depth 1 --branch android-4.4.4_r2.0.1 https://android.googlesource.com/platform/external/zlib
-          git clone --depth 1 --branch android-4.4.4_r2.0.1 https://android.googlesource.com/platform/external/openssl
+          git clone --depth 1 https://android.googlesource.com/platform/external/zlib
+          git clone --depth 1 https://android.googlesource.com/platform/external/openssl
           cd ../..
           
           # Создаём Makefile для ADB
+          mkdir -p system/core/adb
           cat > system/core/adb/Makefile << 'EOF'
           CC = aarch64-linux-musl-gcc
           CXX = aarch64-linux-musl-g++
           AR = aarch64-linux-musl-ar
-          CFLAGS = -static -Os -I. -I../../extras/libcutils/include -I../../external/zlib -I../../external/openssl/include
+          CFLAGS = -static -Os -I. -I../../libcutils/include -I../../external/zlib -I../../external/openssl/include
           LDFLAGS = -static -s -L../../external/zlib -L../../external/openssl -lz -lssl -lcrypto -lpthread
           
           SOURCES = adb.c adb_auth.c adb_client.c commandline.c console.c \
@@ -84,7 +70,7 @@ jobs:
           all: adb
           
           adb: $(OBJECTS)
-          	$(CC) $(LDFLAGS) -o adb $(OBJECTS) ../../extras/libcutils/libcutils.a
+          	$(CC) $(LDFLAGS) -o adb $(OBJECTS) ../../libcutils/libcutils.a
           
           %.o: %.c
           	$(CC) $(CFLAGS) -c $< -o $@
@@ -93,12 +79,12 @@ jobs:
           	rm -f adb $(OBJECTS)
           EOF
           
-          # Собираем libcutils из extras
-          cd system/extras/libcutils
+          # Собираем libcutils
+          cd system/libcutils
           make CC=$CC CXX=$CXX AR=$AR LD=$LD RANLIB=$RANLIB \
-               CFLAGS="-static -Os -I../include" \
+               CFLAGS="-static -Os -I.." \
                libcutils.a
-          cd ../../..
+          cd ../..
           
           # Собираем ADB
           cd system/core/adb
