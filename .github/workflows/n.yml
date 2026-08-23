@@ -17,14 +17,16 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install converter
+      - name: Install mtkclient
         run: |
-          pip install logoextractor  # Установка пакета для конвертации logo.bin
+          git clone https://github.com/bkerler/mtkclient.git
+          cd mtkclient
+          pip install -r requirements.txt
 
-      - name: Run extraction
+      - name: Extract logo.bin
         run: |
-          # Команда для распаковки logo.bin в папку output
-          logoextractor --input logo.bin --output extracted_logos
+          # Используем модуль Logo из mtkclient для распаковки
+          python -m mtkclient.Logo logo.bin --output-dir extracted_logos
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
