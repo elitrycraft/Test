@@ -26,69 +26,38 @@ jobs:
       - name: Verify cross-compiler
         run: aarch64-linux-musl-gcc --version
 
-      - name: Clone AOSP platform/system/core (full ADB source)
+      - name: Clone AOSP components
         run: |
-          # Клонируем необходимые компоненты для сборки ADB
           git clone --depth 1 https://android.googlesource.com/platform/system/core
           git clone --depth 1 https://android.googlesource.com/platform/system/libbase
           git clone --depth 1 https://android.googlesource.com/platform/system/logging
           git clone --depth 1 https://android.googlesource.com/platform/system/libziparchive
-          git clone --depth 1 https://android.googlesource.com/platform/external/protobuf
+          mkdir -p external
+          git clone --depth 1 https://android.googlesource.com/platform/external/protobuf external/protobuf
 
-      - name: Build ADB with full features
+      - name: Build ADB
         run: |
           export CC=aarch64-linux-musl-gcc
           export CXX=aarch64-linux-musl-g++
           export AR=aarch64-linux-musl-ar
           export LD=aarch64-linux-musl-ld
           export RANLIB=aarch64-linux-musl-ranlib
-          export CFLAGS="-static -Os -I$PWD -I$PWD/libbase/include -I$PWD/logging/liblog/include -I$PWD/libziparchive/include -I$PWD/core/adb"
-          export LDFLAGS="-static -s -lprotobuf-lite"
           
-          # Собираем protobuf для статической линковки
           cd external/protobuf
           ./autogen.sh
           ./configure --host=aarch64-linux-musl --enable-static --disable-shared
           make -j$(nproc)
           cd ../..
           
-          # Собираем adb
           cd core/adb
+          make CC=$CC CXX=$CXX AR=$AR LD=$LD RANLIB=$RANLIB \
+               CFLAGS="-static -Os -I$PWD -I$PWD/../../libbase/include -I$PWD/../../logging/liblog/include -I$PWD/../../libziparchive/include -I$PWD/../../external/protobuf/src" \
+               LDFLAGS="-static -s -L$PWD/../../external/protobuf/src/.libs -lprotobuf-lite -lpthread" \
+               adb
           
-          # Создаём Makefile для сборки
-          cat > Makefile << 'EOF'
-          CC = aarch64-linux-musl-gcc
-          CXX = aarch64-linux-musl-g++
-          AR = aarch64-linux-musl-ar
-          CFLAGS = -static -Os -I../.. -I../../libbase/include -I../../logging/liblog/include -I../../libziparchive/include -I../../external/protobuf/src
-          LDFLAGS = -static -s -L../../external/protobuf/src/.libs -lprotobuf-lite -lpthread
-          
-          SOURCES = adb.cpp adb_auth.cpp adb_client.cpp commandline.cpp console.cpp \
-                    adb_io.cpp adb_listeners.cpp adb_utils.cpp fdevent.cpp \
-                    services.cpp shell_service_protocol.cpp adb_mdns.cpp \
-                    adb_trace.cpp adb_unique_fd.cpp
-          
-          OBJECTS = $(SOURCES:.cpp=.o)
-          
-          all: adb
-          
-          adb: $(OBJECTS)
-          	$(CXX) $(LDFLAGS) -o adb $(OBJECTS)
-          
-          %.o: %.cpp
-          	$(CXX) $(CFLAGS) -c $< -o $@
-          
-          clean:
-          	rm -f adb $(OBJECTS)
-          EOF
-          
-          # Собираем
-          make -j$(nproc)
-          
-          # Проверяем
           file adb
           ls -lh adb
-          ./adb version || echo "ADB built successfully!"
+          ./adb version || echo "Built successfully!"
 
       - name: Upload full adb
         uses: actions/upload-artifact@v4
