@@ -33,27 +33,25 @@ jobs:
           
           echo -e "\n>> >>> ADB for ARM (musl) <<< \n"
           
-          # Клонируем ADB
+          # Клонируем все компоненты
           git clone --depth 1 https://android.googlesource.com/platform/system/adb
-          
-          # Клонируем зависимости
           git clone --depth 1 https://android.googlesource.com/platform/system/libbase
           git clone --depth 1 https://android.googlesource.com/platform/system/logging
           git clone --depth 1 https://android.googlesource.com/platform/system/core
           
-          # Создаём упрощённый Makefile для libcutils (без проблемных файлов)
+          # Создаём Makefile для libcutils (только необходимые файлы)
           cat > core/libcutils/Makefile << 'EOF'
           CC = aarch64-linux-musl-gcc
           CXX = aarch64-linux-musl-g++
           AR = aarch64-linux-musl-ar
-          CFLAGS = -static -Os -I. -I../include -I../../libbase/include -I../../core/include
+          CFLAGS = -static -Os -I. -I../include -I../../libbase/include -I../../logging/liblog/include -I../../core/include
           
-          # Только основные файлы без сложных зависимостей
-          SOURCES = android_get_control_file.cpp config_utils.cpp fs.cpp \
-                    hashmap.cpp iosched_policy.cpp klog.cpp load_file.cpp \
-                    multiuser.cpp native_handle.cpp partition_utils.cpp \
-                    properties.cpp qtaguid.cpp record_stream.cpp sockets.cpp \
-                    str_parms.cpp strlcpy.c trace-dev.cpp uevent.cpp
+          # Минимальный набор файлов
+          SOURCES = config_utils.cpp hashmap.cpp iosched_policy.cpp \
+                    klog.cpp load_file.cpp multiuser.cpp native_handle.cpp \
+                    partition_utils.cpp properties.cpp qtaguid.cpp \
+                    record_stream.cpp sockets.cpp str_parms.cpp \
+                    strlcpy.c trace-dev.cpp
           OBJECTS = $(SOURCES:.cpp=.o)
           OBJECTS := $(OBJECTS:.c=.o)
           
@@ -77,16 +75,15 @@ jobs:
           make -j$(nproc)
           cd ../..
           
-          # Создаём упрощённый Makefile для liblog
+          # Создаём Makefile для liblog
           cat > logging/liblog/Makefile << 'EOF'
           CC = aarch64-linux-musl-gcc
           CXX = aarch64-linux-musl-g++
           AR = aarch64-linux-musl-ar
           CFLAGS = -static -Os -I. -I../../libbase/include
           
-          SOURCES = log_event_list.cpp log_event_write.cpp logger_name.cpp \
-                    logger_read.cpp logger_write.cpp logprint.cpp \
-                    properties.cpp event_tag_map.cpp
+          SOURCES = log_event_list.cpp log_event_write.cpp \
+                    logger_read.cpp logger_write.cpp logprint.cpp
           OBJECTS = $(SOURCES:.cpp=.o)
           
           all: liblog.a
