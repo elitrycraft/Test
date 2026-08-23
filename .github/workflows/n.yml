@@ -15,22 +15,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.8'
 
-      - name: Install mtkclient
+      - name: Clone logoTool
         run: |
-          git clone https://github.com/bkerler/mtkclient.git
-          cd mtkclient
-          pip install -r requirements.txt
+          git clone https://github.com/MlgmXyysd/Mtk-Logo-Tool.git
 
       - name: Extract logo.bin
         run: |
-          # Используем модуль Logo из mtkclient для распаковки
-          python -m mtkclient.Logo logo.bin --output-dir extracted_logos
+          python Mtk-Logo-Tool/logoTool.py logo.bin output_folder
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: extracted-images
-          path: extracted_logos/
+          path: output_folder/
           if-no-files-found: error
