@@ -1,0 +1,25 @@
+name: Download musl toolchain
+
+on:
+  workflow_dispatch:  # Запуск вручную
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download musl toolchain
+        run: |
+          # Скачиваем файл с помощью wget
+          wget https://musl.cc/aarch64-linux-musl-cross.tgz
+          
+          # Проверяем, что файл скачался
+          ls -la aarch64-linux-musl-cross.tgz
+
+      - name: Upload toolchain as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: musl-toolchain
+          path: aarch64-linux-musl-cross.tgz
