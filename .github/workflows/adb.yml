@@ -41,18 +41,68 @@ jobs:
           git clone --depth 1 https://android.googlesource.com/platform/system/logging
           git clone --depth 1 https://android.googlesource.com/platform/system/core
           
-          # Собираем libcutils (из core)
+          # Создаём Makefile для libcutils
+          cat > core/libcutils/Makefile << 'EOF'
+          CC = aarch64-linux-musl-gcc
+          CXX = aarch64-linux-musl-g++
+          AR = aarch64-linux-musl-ar
+          CFLAGS = -static -Os -I. -I../include -I../../libbase/include
+          
+          SOURCES = android_get_control_file.cpp config_utils.cpp fs.cpp fs_config.cpp \
+                    hashmap.cpp iosched_policy.cpp klog.cpp load_file.cpp \
+                    multiuser.cpp native_handle.cpp partition_utils.cpp \
+                    properties.cpp qtaguid.cpp record_stream.cpp sockets.cpp \
+                    str_parms.cpp strlcpy.c trace-dev.cpp uevent.cpp
+          OBJECTS = $(SOURCES:.cpp=.o)
+          OBJECTS := $(OBJECTS:.c=.o)
+          
+          all: libcutils.a
+          
+          libcutils.a: $(OBJECTS)
+          	$(AR) rcs $@ $(OBJECTS)
+          
+          %.o: %.cpp
+          	$(CXX) $(CFLAGS) -c $< -o $@
+          
+          %.o: %.c
+          	$(CC) $(CFLAGS) -c $< -o $@
+          
+          clean:
+          	rm -f libcutils.a $(OBJECTS)
+          EOF
+          
+          # Собираем libcutils
           cd core/libcutils
-          make CC=$CC CXX=$CXX AR=$AR LD=$LD RANLIB=$RANLIB \
-               CFLAGS="-static -Os -I.. -I../../libbase/include" \
-               libcutils.a
+          make -j$(nproc)
           cd ../..
           
-          # Собираем liblog (из logging)
+          # Создаём Makefile для liblog
+          cat > logging/liblog/Makefile << 'EOF'
+          CC = aarch64-linux-musl-gcc
+          CXX = aarch64-linux-musl-g++
+          AR = aarch64-linux-musl-ar
+          CFLAGS = -static -Os -I. -I../../libbase/include
+          
+          SOURCES = log_event_list.cpp log_event_write.cpp logger_name.cpp \
+                    logger_read.cpp logger_write.cpp logprint.cpp \
+                    properties.cpp event_tag_map.cpp
+          OBJECTS = $(SOURCES:.cpp=.o)
+          
+          all: liblog.a
+          
+          liblog.a: $(OBJECTS)
+          	$(AR) rcs $@ $(OBJECTS)
+          
+          %.o: %.cpp
+          	$(CXX) $(CFLAGS) -c $< -o $@
+          
+          clean:
+          	rm -f liblog.a $(OBJECTS)
+          EOF
+          
+          # Собираем liblog
           cd logging/liblog
-          make CC=$CC CXX=$CXX AR=$AR LD=$LD RANLIB=$RANLIB \
-               CFLAGS="-static -Os -I.. -I../../libbase/include" \
-               liblog.a
+          make -j$(nproc)
           cd ../..
           
           # Создаём Makefile для ADB
@@ -63,7 +113,6 @@ jobs:
           CFLAGS = -static -Os -I. -I../libbase/include -I../logging/liblog/include -I../core/libcutils/include
           LDFLAGS = -static -s -lpthread
           
-          # Находим все .cpp файлы
           SOURCES = $(wildcard *.cpp) $(wildcard client/*.cpp) $(wildcard daemon/*.cpp) $(wildcard sysdeps/*.cpp)
           OBJECTS = $(SOURCES:.cpp=.o)
           
