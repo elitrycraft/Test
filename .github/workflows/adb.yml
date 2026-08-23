@@ -23,12 +23,13 @@ jobs:
       - name: Verify cross-compiler
         run: aarch64-linux-musl-gcc --version
 
-      - name: Clone ADB and dependencies
+      - name: Clone ADB and all dependencies
         run: |
           git clone --depth 1 https://android.googlesource.com/platform/packages/modules/adb
           git clone --depth 1 https://android.googlesource.com/platform/system/libbase
           git clone --depth 1 https://android.googlesource.com/platform/system/logging
           git clone --depth 1 https://android.googlesource.com/platform/system/libziparchive
+          git clone --depth 1 https://android.googlesource.com/platform/system/libcutils
 
       - name: Build ADB
         run: |
@@ -38,15 +39,22 @@ jobs:
           export LD=aarch64-linux-musl-ld
           export RANLIB=aarch64-linux-musl-ranlib
           
+          # Сначала собираем libcutils и liblog
+          cd libcutils
+          make CC=$CC CXX=$CXX AR=$AR LD=$LD RANLIB=$RANLIB \
+               CFLAGS="-static -Os -I.. -I../libbase/include" \
+               libcutils.a
+          cd ..
+          
+          # Теперь собираем ADB
           cd adb
           
-          # Создаём простой Makefile для сборки adb
           cat > Makefile << 'EOF'
           CC = aarch64-linux-musl-gcc
           CXX = aarch64-linux-musl-g++
           AR = aarch64-linux-musl-ar
-          CFLAGS = -static -Os -I../libbase/include -I../logging/liblog/include -I../libziparchive/include -I.
-          LDFLAGS = -static -s -lpthread
+          CFLAGS = -static -Os -I../libbase/include -I../logging/liblog/include -I../libziparchive/include -I../libcutils/include -I.
+          LDFLAGS = -static -s -L.. -lpthread
           
           SOURCES = adb.cpp adb_auth.cpp adb_client.cpp commandline.cpp console.cpp \
                     adb_io.cpp adb_listeners.cpp adb_utils.cpp fdevent.cpp \
@@ -57,7 +65,7 @@ jobs:
           all: adb
           
           adb: $(OBJECTS)
-          	$(CXX) $(LDFLAGS) -o adb $(OBJECTS)
+          	$(CXX) $(LDFLAGS) -o adb $(OBJECTS) ../libcutils/libcutils.a
           
           %.o: %.cpp
           	$(CXX) $(CFLAGS) -c $< -o $@
@@ -66,7 +74,6 @@ jobs:
           	rm -f adb $(OBJECTS)
           EOF
           
-          # Собираем
           make -j$(nproc)
           
           file adb
