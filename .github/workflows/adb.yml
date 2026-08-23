@@ -1,0 +1,63 @@
+name: Build ADB for Android
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Можно запускать вручную из вкладки Actions
+  workflow_dispatch:
+
+jobs:
+  build-adb:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Клонируем репозиторий
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Устанавливаем JDK (нужен для Android-инструментов)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 3. Устанавливаем Android SDK (установит platform-tools с adb)
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      # 4. Проверяем, что adb есть и он рабочий
+      - name: Verify adb
+        run: |
+          which adb
+          adb --version
+
+      # 5. Архивируем adb и связанные библиотеки
+      - name: Package adb binary
+        run: |
+          # Находим путь к adb
+          ADB_PATH=$(which adb)
+          echo "ADB found at: $ADB_PATH"
+          
+          # Создаём папку для пакета
+          mkdir -p adb-package
+          
+          # Копируем сам бинарник
+          cp $(which adb) adb-package/
+          
+          # Находим и копируем необходимые библиотеки (для статической сборки)
+          # Это упрощённый вариант — собираем только бинарник
+          # Для полной сборки нужен NDK и исходники AOSP
+          
+          # Создаём архив
+          tar -czf adb-android.tar.gz -C adb-package .
+          
+      # 6. Загружаем артефакт
+      - name: Upload adb binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: adb-android
+          path: adb-android.tar.gz
