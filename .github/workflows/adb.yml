@@ -1,10 +1,10 @@
-name: Build Full ADB from AOSP for ARM64
+name: Build ADB for ARM64 (simplified)
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-full-adb:
+  build-adb:
     runs-on: ubuntu-latest
     steps:
       - name: Install build dependencies
@@ -12,10 +12,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             git make gcc g++ autoconf automake libtool \
-            pkg-config python3 python3-dev file wget \
-            cmake ninja-build zip unzip \
-            python3-protobuf protobuf-compiler \
-            libprotobuf-dev
+            pkg-config python3 python3-dev file wget
 
       - name: Download musl-cross from release
         run: |
@@ -26,14 +23,12 @@ jobs:
       - name: Verify cross-compiler
         run: aarch64-linux-musl-gcc --version
 
-      - name: Clone AOSP components
+      - name: Clone AOSP components (without protobuf)
         run: |
           git clone --depth 1 https://android.googlesource.com/platform/system/core
           git clone --depth 1 https://android.googlesource.com/platform/system/libbase
           git clone --depth 1 https://android.googlesource.com/platform/system/logging
           git clone --depth 1 https://android.googlesource.com/platform/system/libziparchive
-          mkdir -p external
-          git clone --depth 1 https://android.googlesource.com/platform/external/protobuf external/protobuf
 
       - name: Build ADB
         run: |
@@ -43,24 +38,20 @@ jobs:
           export LD=aarch64-linux-musl-ld
           export RANLIB=aarch64-linux-musl-ranlib
           
-          cd external/protobuf
-          ./autogen.sh
-          ./configure --host=aarch64-linux-musl --enable-static --disable-shared
-          make -j$(nproc)
-          cd ../..
-          
           cd core/adb
+          
+          # Упрощённая сборка без protobuf
           make CC=$CC CXX=$CXX AR=$AR LD=$LD RANLIB=$RANLIB \
-               CFLAGS="-static -Os -I$PWD -I$PWD/../../libbase/include -I$PWD/../../logging/liblog/include -I$PWD/../../libziparchive/include -I$PWD/../../external/protobuf/src" \
-               LDFLAGS="-static -s -L$PWD/../../external/protobuf/src/.libs -lprotobuf-lite -lpthread" \
+               CFLAGS="-static -Os -I$PWD -I$PWD/../../libbase/include -I$PWD/../../logging/liblog/include -I$PWD/../../libziparchive/include" \
+               LDFLAGS="-static -s" \
                adb
           
           file adb
           ls -lh adb
-          ./adb version || echo "Built successfully!"
+          ./adb version || echo "Built!"
 
-      - name: Upload full adb
+      - name: Upload adb
         uses: actions/upload-artifact@v4
         with:
-          name: full-adb-arm64
+          name: adb-arm64-simple
           path: core/adb/adb
