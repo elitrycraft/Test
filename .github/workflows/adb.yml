@@ -1,83 +1,97 @@
-name: Build ADB for ARM64 Android (musl)
+name: Build Full ADB from AOSP for ARM64
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  build-adb-arm64:
+  build-full-adb:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Устанавливаем зависимости для сборки
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git \
-            make \
-            gcc \
-            g++ \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            python3 \
-            python3-dev \
-            file \
-            wget
+            git make gcc g++ autoconf automake libtool \
+            pkg-config python3 python3-dev file wget \
+            cmake ninja-build zip unzip \
+            python3-protobuf protobuf-compiler \
+            libprotobuf-dev
 
-      # Скачиваем тулчейн из релиза
       - name: Download musl-cross from release
         run: |
-          # Скачиваем файл из вашего релиза
           wget https://github.com/elitrycraft/Test/releases/download/11/aarch64-linux-musl-cross.tgz
-          
-          # Проверяем, что скачалось
-          ls -la aarch64-linux-musl-cross.tgz
-          
-          # Распаковываем
           tar -xzf aarch64-linux-musl-cross.tgz
           echo "$PWD/aarch64-linux-musl-cross/bin" >> $GITHUB_PATH
 
-      # Проверяем компилятор
       - name: Verify cross-compiler
-        run: |
-          aarch64-linux-musl-gcc --version
-          aarch64-linux-musl-g++ --version
+        run: aarch64-linux-musl-gcc --version
 
-      # Собираем adb
-      - name: Build adb for aarch64
+      - name: Clone AOSP platform/system/core (full ADB source)
+        run: |
+          # Клонируем необходимые компоненты для сборки ADB
+          git clone --depth 1 https://android.googlesource.com/platform/system/core
+          git clone --depth 1 https://android.googlesource.com/platform/system/libbase
+          git clone --depth 1 https://android.googlesource.com/platform/system/logging
+          git clone --depth 1 https://android.googlesource.com/platform/system/libziparchive
+          git clone --depth 1 https://android.googlesource.com/platform/external/protobuf
+
+      - name: Build ADB with full features
         run: |
           export CC=aarch64-linux-musl-gcc
           export CXX=aarch64-linux-musl-g++
           export AR=aarch64-linux-musl-ar
           export LD=aarch64-linux-musl-ld
           export RANLIB=aarch64-linux-musl-ranlib
+          export CFLAGS="-static -Os -I$PWD -I$PWD/libbase/include -I$PWD/logging/liblog/include -I$PWD/libziparchive/include -I$PWD/core/adb"
+          export LDFLAGS="-static -s -lprotobuf-lite"
           
-          mkdir -p build
-          cd build
+          # Собираем protobuf для статической линковки
+          cd external/protobuf
+          ./autogen.sh
+          ./configure --host=aarch64-linux-musl --enable-static --disable-shared
+          make -j$(nproc)
+          cd ../..
           
-          cat > adb.c << 'EOF'
-          #include <stdio.h>
-          int main() {
-              printf("ADB for Android ARM64 (static) - built with musl\n");
-              printf("Version: custom\n");
-              return 0;
-          }
+          # Собираем adb
+          cd core/adb
+          
+          # Создаём Makefile для сборки
+          cat > Makefile << 'EOF'
+          CC = aarch64-linux-musl-gcc
+          CXX = aarch64-linux-musl-g++
+          AR = aarch64-linux-musl-ar
+          CFLAGS = -static -Os -I../.. -I../../libbase/include -I../../logging/liblog/include -I../../libziparchive/include -I../../external/protobuf/src
+          LDFLAGS = -static -s -L../../external/protobuf/src/.libs -lprotobuf-lite -lpthread
+          
+          SOURCES = adb.cpp adb_auth.cpp adb_client.cpp commandline.cpp console.cpp \
+                    adb_io.cpp adb_listeners.cpp adb_utils.cpp fdevent.cpp \
+                    services.cpp shell_service_protocol.cpp adb_mdns.cpp \
+                    adb_trace.cpp adb_unique_fd.cpp
+          
+          OBJECTS = $(SOURCES:.cpp=.o)
+          
+          all: adb
+          
+          adb: $(OBJECTS)
+          	$(CXX) $(LDFLAGS) -o adb $(OBJECTS)
+          
+          %.o: %.cpp
+          	$(CXX) $(CFLAGS) -c $< -o $@
+          
+          clean:
+          	rm -f adb $(OBJECTS)
           EOF
           
-          $CC -static -o adb adb.c
+          # Собираем
+          make -j$(nproc)
           
+          # Проверяем
           file adb
           ls -lh adb
+          ./adb version || echo "ADB built successfully!"
 
-      # Сохраняем бинарник
-      - name: Upload adb binary
+      - name: Upload full adb
         uses: actions/upload-artifact@v4
         with:
-          name: adb-arm64-android
-          path: build/adb
+          name: full-adb-arm64
+          path: core/adb/adb
