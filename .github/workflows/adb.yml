@@ -33,64 +33,45 @@ jobs:
           
           echo -e "\n>> >>> ADB for ARM (musl) <<< \n"
           
-          # Создаём структуру
-          mkdir -p android-adb/system
-          cd android-adb/system || exit 1
+          # Клонируем отдельный репозиторий ADB
+          git clone --depth 1 https://android.googlesource.com/platform/system/adb
           
-          # Клонируем system/core (в нём есть и adb, и libcutils, и liblog)
-          git clone --depth 1 https://android.googlesource.com/platform/system/core
-          
-          cd ..
-          mkdir -p external
-          cd external || exit 1
-          git clone --depth 1 https://android.googlesource.com/platform/external/zlib
-          git clone --depth 1 https://android.googlesource.com/platform/external/openssl
-          cd ../..
-          
-          # Создаём Makefile для ADB
-          mkdir -p system/core/adb
-          cat > system/core/adb/Makefile << 'EOF'
+          # Создаём Makefile для сборки ADB
+          cat > adb/Makefile << 'EOF'
           CC = aarch64-linux-musl-gcc
           CXX = aarch64-linux-musl-g++
           AR = aarch64-linux-musl-ar
-          CFLAGS = -static -Os -I. -I../../core/libcutils/include -I../../external/zlib -I../../external/openssl/include
-          LDFLAGS = -static -s -L../../external/zlib -L../../external/openssl -lz -lssl -lcrypto -lpthread
+          CFLAGS = -static -Os -I.
+          LDFLAGS = -static -s -lpthread
           
-          SOURCES = adb.c adb_auth.c adb_client.c commandline.c console.c \
-                    adb_io.c adb_listeners.c adb_utils.c fdevent.c \
-                    services.c shell_service_protocol.c adb_mdns.c \
-                    adb_trace.c adb_unique_fd.c usb_linux.c
-          OBJECTS = $(SOURCES:.c=.o)
+          SOURCES = adb.cpp adb_auth.cpp adb_client.cpp commandline.cpp console.cpp \
+                    adb_io.cpp adb_listeners.cpp adb_utils.cpp fdevent.cpp \
+                    services.cpp shell_service_protocol.cpp adb_mdns.cpp \
+                    adb_trace.cpp adb_unique_fd.cpp
+          OBJECTS = $(SOURCES:.cpp=.o)
           
           all: adb
           
           adb: $(OBJECTS)
-          	$(CC) $(LDFLAGS) -o adb $(OBJECTS) ../../core/libcutils/libcutils.a
+          	$(CXX) $(LDFLAGS) -o adb $(OBJECTS)
           
-          %.o: %.c
-          	$(CC) $(CFLAGS) -c $< -o $@
+          %.o: %.cpp
+          	$(CXX) $(CFLAGS) -c $< -o $@
           
           clean:
           	rm -f adb $(OBJECTS)
           EOF
           
-          # Собираем libcutils (внутри core)
-          cd system/core/libcutils
-          make CC=$CC CXX=$CXX AR=$AR LD=$LD RANLIB=$RANLIB \
-               CFLAGS="-static -Os -I.." \
-               libcutils.a
-          cd ../../..
-          
           # Собираем ADB
-          cd system/core/adb
+          cd adb
           make -j$(nproc)
           
           file adb
           ls -lh adb
           ./adb version || echo "Built!"
           
-          cp adb ../../../../
-          cd ../../../../
+          cp adb ../
+          cd ..
           
           echo -e "\n>> FINISH!\n"
 
@@ -98,4 +79,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: adb-arm64-musl
-          path: android-adb/adb
+          path: adb
