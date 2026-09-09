@@ -34,39 +34,33 @@ jobs:
           export PATH=/opt/nim/bin:$PATH
           echo "/opt/nim/bin" >> $GITHUB_PATH
 
-      - name: Build Nim from source (ARM64 + musl) — правильный способ
+      - name: Build ARM64 Nim compiler directly
         run: |
-          # Клонируем репозиторий
+          # Клонируем исходники Nim
           git clone https://github.com/nim-lang/Nim.git
           cd Nim
           git checkout v2.0.2
 
-          # Сначала собираем koch (без кросс-компиляции)
-          /opt/nim/bin/nim c -d:release -o:bin/koch koch.nim
-
-          # Теперь собираем компилятор под x86_64 (потому что koch сам скомпилирован под x86_64)
-          # и потом уже пересобираем под ARM64 через обычный nim
-          ./bin/koch boot -d:release
-
-          # Теперь у нас есть компилятор под x86_64 (но нам нужен ARM64)
-          # Пересобираем компилятор под ARM64, используя только что собранный компилятор
-          ./bin/nim c -d:release \
+          # Компилируем компилятор под ARM64 с musl
+          # Используем готовый nim (x86_64) для кросс-компиляции
+          /opt/nim/bin/nim c -d:release \
             --cpu:arm64 \
             --os:linux \
             --gcc.exe:musl-gcc \
             --gcc.linkerexe:musl-gcc \
             --passC:-static \
             --passL:-static \
+            --nimcache:nimcache \
             -o:bin/nim_arm64 \
             compiler/nim.nim
 
-          # Проверяем, что бинарник действительно ARM64
+          # Проверяем результат
           file bin/nim_arm64
 
-          # Переименовываем правильный бинарник в nim
+          # Переименовываем
           mv bin/nim_arm64 bin/nim
 
-          # Копируем в /opt/nim-arm64
+          # Копируем всё в /opt/nim-arm64
           mkdir -p /opt/nim-arm64
           cp bin/nim /opt/nim-arm64/
           cp -r lib /opt/nim-arm64/
@@ -74,10 +68,11 @@ jobs:
           cp -r compiler /opt/nim-arm64/
           cp -r tools /opt/nim-arm64/
 
+          # Сохраняем путь
           echo "/opt/nim-arm64" >> $GITHUB_PATH
         shell: /usr/bin/bash -e {0}
 
-      - name: Build all tools (nimble, nimsuggest, nimpretty, nimgrep, testament, atlas)
+      - name: Build all tools
         run: |
           export PATH=/opt/nim-arm64:$PATH
           /opt/nim-arm64/nim --version
@@ -97,10 +92,10 @@ jobs:
               tools/$tool.nim
           done
 
-          # nim-gdb — это скрипт, просто копируем
+          # nim-gdb — скрипт
           cp tools/nim-gdb /opt/nim-arm64/ 2>/dev/null || echo "nim-gdb not found"
 
-          # nim_dbg — если есть
+          # nim_dbg
           if [ -f bin/nim_dbg ]; then
             cp bin/nim_dbg /opt/nim-arm64/
           else
