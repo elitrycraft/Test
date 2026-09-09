@@ -38,24 +38,25 @@ jobs:
           cd Nim
           git checkout v2.0.2
 
-          # Конфигурация сборки через build.sh
-          sh build.sh \
-            --cc:musl-gcc \
-            --cflags:"-static -O2 -pipe -fno-strict-aliasing" \
-            --ldflags:"-static" \
-            --os:linux \
-            --cpu:arm64
+          # Собираем koch (инструмент сборки Nim)
+          /opt/nim/bin/nim c -d:release -o:bin/koch koch.nim
 
-          cd build
-          make -j$(nproc)
+          # Через koch собираем сам Nim под ARM64 с musl
+          ./koch boot -d:release \
+            --cc:musl-gcc \
+            --passC:"-static -O2 -pipe -fno-strict-aliasing" \
+            --passL:"-static"
+
+          # Проверяем архитектуру
+          file bin/nim
 
           # Устанавливаем в /opt/nim-arm64
           mkdir -p /opt/nim-arm64
           cp bin/nim /opt/nim-arm64/
-          cp -r ../lib /opt/nim-arm64/
-          cp -r ../config /opt/nim-arm64/
-          cp -r ../compiler /opt/nim-arm64/
-          cp -r ../tools /opt/nim-arm64/
+          cp -r lib /opt/nim-arm64/
+          cp -r config /opt/nim-arm64/
+          cp -r compiler /opt/nim-arm64/
+          cp -r tools /opt/nim-arm64/
         shell: /usr/bin/bash -e {0}
 
       - name: Build all tools
