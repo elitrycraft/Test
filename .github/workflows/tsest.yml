@@ -48,7 +48,7 @@ jobs:
           ls -la bin/
 
           # Запускаем сборку через koch под ARM64 с musl
-          # ./koch — это бинарник, который мы только что собрали
+          # Используем ./bin/koch, потому что бинарник лежит в bin/
           ./bin/koch boot -d:release \
             --cc:musl-gcc \
             --passC:"-static -O2 -pipe -fno-strict-aliasing" \
