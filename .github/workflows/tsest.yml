@@ -8,6 +8,7 @@ on:
 jobs:
   build-nim-tools:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,9 +23,10 @@ jobs:
             wget \
             xz-utils \
             libssl-dev \
-            pkg-config
+            pkg-config \
+            file
 
-      - name: Install Nim compiler (bootstrap для x86_64)
+      - name: Install Nim bootstrap (x86_64)
         run: |
           wget https://nim-lang.org/download/nim-2.0.2-linux_x64.tar.xz
           tar -xf nim-2.0.2-linux_x64.tar.xz
@@ -32,8 +34,9 @@ jobs:
           export PATH=/opt/nim/bin:$PATH
           echo "/opt/nim/bin" >> $GITHUB_PATH
 
-      - name: Build Nim from source (arm64 с musl)
+      - name: Build Nim from source (ARM64 + musl)
         run: |
+          # Клонируем репозиторий
           git clone https://github.com/nim-lang/Nim.git
           cd Nim
           git checkout v2.0.2
@@ -41,34 +44,46 @@ jobs:
           # Собираем koch (инструмент сборки Nim)
           /opt/nim/bin/nim c -d:release -o:bin/koch koch.nim
 
-          # Через koch собираем сам Nim под ARM64 с musl
-          ./koch boot -d:release \
+          # Проверяем, что koch собран
+          ls -la bin/
+
+          # Запускаем сборку через koch под ARM64 с musl
+          # ./koch — это бинарник, который мы только что собрали
+          ./bin/koch boot -d:release \
             --cc:musl-gcc \
             --passC:"-static -O2 -pipe -fno-strict-aliasing" \
             --passL:"-static"
 
-          # Проверяем архитектуру
+          # Проверяем результат
           file bin/nim
 
-          # Устанавливаем в /opt/nim-arm64
+          # Копируем компилятор и всё необходимое в /opt/nim-arm64
           mkdir -p /opt/nim-arm64
           cp bin/nim /opt/nim-arm64/
           cp -r lib /opt/nim-arm64/
           cp -r config /opt/nim-arm64/
           cp -r compiler /opt/nim-arm64/
           cp -r tools /opt/nim-arm64/
+
+          # Сохраняем путь для следующих шагов
+          echo "/opt/nim-arm64" >> $GITHUB_PATH
         shell: /usr/bin/bash -e {0}
 
-      - name: Build all tools
+      - name: Build all tools (nimble, nimsuggest, nimpretty, nimgrep, testament, atlas)
         run: |
           export PATH=/opt/nim-arm64:$PATH
+
+          # Убеждаемся, что компилятор работает
+          /opt/nim-arm64/nim --version
+
           cd /opt/nim-arm64
 
+          # Список инструментов из твоей картинки
           TOOLS="nimble nimsuggest nimpretty nimgrep testament atlas"
 
           for tool in $TOOLS; do
-            echo "Building $tool..."
-            nim c -d:release \
+            echo "🔨 Building $tool..."
+            /opt/nim-arm64/nim c -d:release \
               --cpu:arm64 --os:linux \
               --gcc.exe:musl-gcc \
               --gcc.linkerexe:musl-gcc \
@@ -78,31 +93,46 @@ jobs:
               tools/$tool.nim
           done
 
-          cp tools/nim-gdb /opt/nim-arm64/ 2>/dev/null || true
+          # nim-gdb — это скрипт, просто копируем его
+          cp tools/nim-gdb /opt/nim-arm64/ 2>/dev/null || echo "nim-gdb not found"
+
+          # nim_dbg — если есть, копируем
           if [ -f bin/nim_dbg ]; then
             cp bin/nim_dbg /opt/nim-arm64/
           else
             echo "nim_dbg not found, skipping"
           fi
 
-      - name: Verify binaries
+      - name: Verify binaries (проверка всех файлов)
         run: |
           cd /opt/nim-arm64
+          echo "📦 Проверяем все бинарники:"
           for f in nim nimble nimsuggest nimpretty nimgrep testament atlas nim-gdb nim_dbg; do
             if [ -f "$f" ]; then
-              echo "✅ $f — $(file $f | grep -o 'ELF.*')"
+              SIZE=$(du -h "$f" | cut -f1)
+              TYPE=$(file "$f" | grep -o 'ELF.*' || echo "script")
+              echo "✅ $f — $SIZE — $TYPE"
             else
               echo "❌ $f не найден"
             fi
           done
 
-      - name: Package everything
+      - name: Package everything (упаковка в архив)
         run: |
           cd /opt/nim-arm64
           mkdir -p nim-tools-arm64-musl
+
+          # Копируем все бинарники
           cp nim nimble nimsuggest nimpretty nimgrep testament atlas nim-gdb nim_dbg nim-tools-arm64-musl/ 2>/dev/null || true
+
+          # Копируем служебные папки
           cp -r lib config compiler tools nim-tools-arm64-musl/ 2>/dev/null || true
+
+          # Создаём архив
           tar -czf /tmp/nim-tools-arm64-musl.tar.gz nim-tools-arm64-musl/
+
+          echo "📦 Архив создан: /tmp/nim-tools-arm64-musl.tar.gz"
+          ls -lh /tmp/nim-tools-arm64-musl.tar.gz
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
